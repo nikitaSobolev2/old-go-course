@@ -1,0 +1,7 @@
+CREATE TABLE orders (
+  id CHAR(36) NOT NULL PRIMARY KEY,
+  customer_id VARCHAR(255) NOT NULL,
+  status VARCHAR(64) NOT NULL,
+  items JSON NOT NULL,
+  created_at DATETIME(6) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

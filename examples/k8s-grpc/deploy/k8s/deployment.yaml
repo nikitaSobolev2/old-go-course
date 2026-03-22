@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-grpc
+  labels:
+    app: k8s-grpc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-grpc
+  template:
+    metadata:
+      labels:
+        app: k8s-grpc
+    spec:
+      containers:
+        - name: api
+          image: k8s-grpc:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: grpc
+              containerPort: 50051
+          envFrom:
+            - configMapRef:
+                name: k8s-grpc-config
+          readinessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 5
+            periodSeconds: 10

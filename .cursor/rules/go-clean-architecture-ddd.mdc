@@ -1,0 +1,72 @@
+---
+alwaysApply: true
+---
+# Clean Architecture & DDD — Logic & Rationale
+
+## Dependency Rule (Why It Matters)
+
+**Direction:** domain ← application ← infrastructure. Dependencies point inward only.
+
+**Rationale:** Domain contains business rules — they must not depend on DB, HTTP, or external libs. This allows testing domain logic with mocks, swapping DB/HTTP without touching business code, and keeping the core stable when infrastructure changes.
+
+**In Go:** domain package imports only `context`, `errors`, `time`, and domain types. No `database/sql`, `net/http`, or third-party clients.
+
+## Bounded Contexts
+
+**What:** A bounded context is a boundary within which a model has a specific meaning. "Order" in Ordering context ≠ "Order" in Shipping context.
+
+**Why:** Different parts of the system have different vocabularies and rules. Mixing them causes confusion and bugs.
+
+**In code:** Separate packages: `internal/ordering/`, `internal/shipping/`. They communicate via events or ACL (Anti-Corruption Layer), not shared structs.
+
+## Entities vs Value Objects
+
+**Entity:** Has identity (ID). Two entities with same fields but different IDs are different. Mutable over time. Example: Order, User.
+
+**Value Object:** No identity. Two VOs with same values are equal. Immutable. Example: Money, Address, Email.
+
+**In Go:** Entity = struct with exported ID; methods mutate. Value Object = struct with unexported fields; constructor returns new instance; no setters.
+
+**Why:** Entities model lifecycle; VOs model domain concepts that don't change identity.
+
+## Repository Pattern
+
+**What:** Abstraction over persistence. Interface says "get/save"; implementation knows SQL/Redis/etc.
+
+**Why:** Domain and application layers don't care how data is stored. Tests use in-memory fake. Production uses Postgres. Same code.
+
+**Interface in domain:** `type OrderRepository interface { GetByID(ctx, id) (*Order, error); Save(ctx, *Order) error }`
+
+**Implementation in infrastructure:** `PostgresOrderRepository` implements the interface. Injected via constructor.
+
+**One per aggregate:** Repository loads/saves whole aggregates, not individual entities within them.
+
+## CQRS
+
+**What:** Separate read and write models. Commands change state; queries return data.
+
+**Why:** Read and write often have different shapes and scaling needs. Write model enforces invariants; read model can be denormalized for fast queries.
+
+**Commands:** `CreateOrder`, `CancelOrder` — imperative, return `error`. Handler loads aggregate, calls domain method, saves.
+
+**Queries:** `GetOrderByID`, `ListOrders` — return DTOs. May hit read-optimized store (e.g. materialized view).
+
+**When to use:** Complex domains, read-heavy workloads, or when read/write models diverge. Overkill for simple CRUD.
+
+## DTOs at Boundaries
+
+**What:** Data Transfer Objects — structs for API request/response, not domain entities.
+
+**Why:** API contract may differ from domain. Domain has `Order` with internal state; API returns `OrderResponse` with selected fields. Domain changes don't force API changes.
+
+**Mapping:** Handler receives DTO → validates → maps to command/entity. Handler returns entity → maps to DTO → JSON.
+
+**Never expose:** Domain entities directly in HTTP. They may have unexported fields, methods, or internal state that shouldn't leak.
+
+## Service Layer
+
+**What:** Orchestrates use cases. Calls repositories, domain services, external APIs. Manages transactions.
+
+**Why:** Use case "CreateOrder" might: validate, load user, create order, save order, publish event, send notification. This coordination belongs in application layer, not domain.
+
+**In Go:** One service per bounded context or per use case group. Services depend on repository interfaces (from domain), not implementations.

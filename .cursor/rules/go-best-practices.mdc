@@ -1,0 +1,68 @@
+---
+alwaysApply: true
+---
+# Go Best Practices — Logic & Rationale
+
+## Error Handling
+
+**Why Go uses explicit errors (no exceptions):** Predictable control flow; every error path is visible. Exceptions hide failure modes and make it unclear what can fail.
+
+**The `%w` verb:** Wrapping with `fmt.Errorf("op: %w", err)` preserves the error chain. `errors.Is(err, ErrNotFound)` walks the chain; `errors.As(err, &target)` extracts typed errors. Without `%w`, the chain breaks and sentinel/typed checks fail.
+
+**Sentinel errors:** `var ErrNotFound = errors.New("not found")` — use `errors.Is(err, ErrNotFound)` for comparison. Sentinels are for expected, handleable cases (e.g. 404).
+
+**Typed errors:** Custom struct implementing `error` — use `errors.As(err, &myErr)` to extract and handle specific cases (e.g. validation errors with field list).
+
+```go
+// ❌ BAD — loses chain, errors.Is fails
+return fmt.Errorf("fetch: %v", err)
+
+// ✅ GOOD — preserves chain
+return fmt.Errorf("fetch: %w", err)
+```
+
+## Context
+
+**Why first parameter:** Convention; enables middleware and decorators to pass context through. `context.Context` carries deadlines, cancellation, and request-scoped values.
+
+**Cancellation propagation:** When `ctx.Done()` is closed, all downstream operations should stop. HTTP handlers get `r.Context()` — it cancels when client disconnects. DB calls use `QueryContext(ctx, ...)` so long queries can be aborted.
+
+**Always defer cancel:** `WithCancel`/`WithTimeout` return a `cancel` func. Not calling it leaks the context and its goroutines. Use `defer cancel()` immediately after creation.
+
+**WithValue:** Only for request-scoped data (user ID, request ID). Keys should be custom types to avoid collisions. Do not use for optional function parameters.
+
+## Concurrency
+
+**Channels vs Mutex — the rule:** "Don't communicate by sharing memory; share memory by communicating." Channels transfer ownership of data; Mutex protects shared state. Use channels for pipelines, worker pools, coordination; Mutex for caches, counters.
+
+**Race detector:** `go run -race` instruments memory access. Run in CI — races are non-deterministic and may not appear in normal runs.
+
+**Loop variable capture:** In `for i := range items`, `i` is reused each iteration. A goroutine closing over `i` sees the final value. Fix: `i := i` creates a new variable per iteration.
+
+**sync.WaitGroup:** `Add(n)` before spawning goroutines; `Done()` inside each; `Wait()` blocks until all complete. Never call `Add` from inside a goroutine — race.
+
+## Interfaces
+
+**Small interfaces:** `io.Reader` has one method. Small interfaces are easier to implement and mock. Large interfaces force unnecessary implementations.
+
+**Define at use site:** Define `type UserFetcher interface { GetUser(id string) (*User, error) }` in the package that consumes it, not where it's implemented. The consumer declares what it needs.
+
+**Accept interfaces, return structs:** Functions take interfaces (flexibility, testability); return concrete types (clarity, no interface{}). Exception: factory functions may return interfaces.
+
+## net/http
+
+**Handler interface:** `ServeHTTP(ResponseWriter, *Request)` — single method. Middleware wraps handlers: `func(next http.Handler) http.Handler`.
+
+**WriteHeader before Write:** Headers are sent on first write. Call `WriteHeader` before `Write`; otherwise 200 is implied.
+
+**ResponseWriter:** Do not store references — it may be an interface to a pooled type. Use within the handler only.
+
+**Request.Body:** Always `defer r.Body.Close()` or drain it. Unclosed bodies leak connections from the pool.
+
+## sync & sync/atomic
+
+**Mutex vs RWMutex:** RWMutex allows multiple readers or one writer. Use when reads dominate; otherwise Mutex is simpler and sometimes faster.
+
+**sync.Once:** For lazy init and singletons. `Do` runs exactly once; safe for concurrent callers.
+
+**atomic:** For simple counters and flags. Prefer `atomic.Int64` (Go 1.19+) over `atomic.AddInt64`. Use Mutex when the operation is not a single instruction.

@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package quote.v1;
+
+option go_package = "github.com/example/go-examples/k8s-grpc/gen/quote/v1;quotev1";
+
+service QuoteService {
+  rpc GetQuote(GetQuoteRequest) returns (GetQuoteResponse);
+}
+
+message GetQuoteRequest {
+  string symbol = 1;
+}
+
+message GetQuoteResponse {
+  string symbol = 1;
+  double price = 2;
+}

@@ -1,0 +1,51 @@
+---
+description: Go project structure with rationale
+alwaysApply: true
+---
+
+# Go Project Structure — Logic & Rationale
+
+## cmd/ — Entry Points
+
+**What:** One directory per executable. `cmd/api/main.go`, `cmd/worker/main.go`.
+
+**Why:** Go compiles to single binaries. Each `main` package produces one binary. Separating entry points keeps build targets clear.
+
+**Logic in main:** Minimal. Parse config, create dependencies (DB, repo, service), wire router, start server. No business logic — delegate to internal packages.
+
+## internal/ — Private Code
+
+**What:** Code that cannot be imported by other modules. Enforced by Go compiler.
+
+**Why:** Encapsulation. Your module's API is what you export from the root or `pkg/`. `internal/` is implementation detail — other projects cannot depend on it, reducing coupling.
+
+**Substructure:**
+- `domain/` — entities, value objects, repository interfaces. No external deps.
+- `application/` — commands, queries, services. Depends on domain.
+- `infrastructure/` — HTTP handlers, DB implementations, Redis, etc. Depends on domain (implements interfaces).
+
+## pkg/ — Public Reusable Code
+
+**What:** Code intended for import by other projects. Optional.
+
+**Why:** If you build a library others will use, put it in `pkg/`. If the project is an application only, you may not need `pkg/`.
+
+**Naming:** `pkg/` or root-level exported packages. `internal/` is never importable.
+
+## Import Conventions
+
+**Order:** stdlib → blank line → third-party → blank line → local (module path).
+
+**Why:** Readability. Grouping makes dependencies obvious. `goimports` enforces this.
+
+**Module path:** Use full path `github.com/org/project/internal/domain`. Avoid relative imports across packages — they break when packages move.
+
+## Testing
+
+**Same package:** `foo_test.go` in package `foo` — white-box testing, can access unexported symbols. Use `package foo_test` for black-box.
+
+**Table-driven:** Slice of structs with input/want; loop with `t.Run(name, fn)`. Reduces duplication, easy to add cases.
+
+**t.Run subtests:** Each case runs as subtest. `go test -run TestFoo/bar` runs one case. Parallel: `t.Parallel()` — be careful with shared state.
+
+**Integration tests:** `*_integration_test.go` or `test/integration/`. Use build tag `//go:build integration` so they don't run in CI by default.

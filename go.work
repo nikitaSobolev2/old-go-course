@@ -1,0 +1,14 @@
+go 1.23.0
+
+use (
+	./examples/rest-api
+	./examples/observability-ms
+	./examples/k8s-grpc
+	./examples/fiber-ms
+	./examples/rabbitmq-redis-ms
+	./examples/swagger-openapi
+	./examples/mysql-ms
+	./examples/postgres-ms
+	./examples/concurrency-patterns
+	./examples/s3-storage
+)
